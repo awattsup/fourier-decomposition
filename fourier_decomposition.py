@@ -22,7 +22,6 @@ The University of Western Australia
 """
 
 import numpy as np 
-# import pafit as pf 
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from scipy.optimize import curve_fit
@@ -37,126 +36,153 @@ from vorbin.voronoi_2d_binning import voronoi_2d_binning
 
 def main():
 
-	Imap, Vfield, R_opt = model_intensity_velocity_map(PA = [0,0])
-	print(R_opt)
-	xcoord = []
-	ycoord = []
-	Imap_signal = []
-	Vfield_signal = []
-	noise = []
-	for yy in range(len(Imap)):
-		for xx in range(len(Imap)):
-			xcoord.extend([xx])
-			ycoord.extend([yy])
-			Imap_signal.extend([Imap[yy,xx]])
-			Vfield_signal.extend([Vfield[yy,xx]])
-			noise.extend([1])
+	# create = False
+	# if create == True:
 
-	# binNum, xNode, yNode, xBar, yBar, sn, nPixels, scale = voronoi_2d_binning(
-	# 	np.array(xcoord), np.array(ycoord), np.array(Imap_signal), np.array(noise),  20., plot=0, quiet=0, pixelsize=1)
-	# # plt.tight_layout()
-	# # plt.show()
+	# 	Imap, Vfield, R_opt = model_intensity_velocity_map_2comp(PA = [0,0])
+	# 	xcoord = []
+	# 	ycoord = []
+	# 	Imap_signal = []
+	# 	Vfield_signal = []
+	# 	noise = []
+	# 	for yy in range(len(Imap)):
+	# 		for xx in range(len(Imap)):
+	# 			xcoord.extend([xx])
+	# 			ycoord.extend([yy])
+	# 			Imap_signal.extend([Imap[yy,xx]])
+	# 			Vfield_signal.extend([Vfield[yy,xx]])
+	# 			noise.extend([1])
 
-	# np.savetxt('./data/voroni_bins_PA0_1comp.txt', np.column_stack([np.array(xcoord), np.array(ycoord), binNum]),
-	# 			fmt=b'%10.6f %10.6f %8i')
-	# exit()
-	data = np.loadtxt('./data/voroni_bins_PA0_1comp.txt')
-	xcoord = data[:,0]
-	ycoord = data[:,1]
-	binNum = data[:,2].astype(int)
+	# 	binNum, xNode, yNode, xBar, yBar, sn, nPixels, scale = voronoi_2d_binning(
+	# 		np.array(xcoord), np.array(ycoord), np.array(Imap_signal), np.array(noise),  20., plot=0, quiet=0, pixelsize=1)
+
+	# 	Imap_signal = np.array(Imap_signal)
+	# 	Vfield_signal = np.array(Vfield_signal)
+
+	# 	Nbins = np.nanmax(binNum)
+	# 	Imap_binvals = np.zeros(Nbins)
+	# 	Vfield_binvals = np.zeros(Nbins)
+
+	# 	for bb in range(Nbins):
+	# 		pixinbin = np.where(binNum == bb)[0]
+	# 		Imap_binvals[bb] = np.median(Imap_signal[pixinbin])
+	# 		Vfield_binvals[bb] = np.median(Vfield_signal[pixinbin])
+
+		
+	# 	dens2 = (Imap_signal/np.array(noise))**4
+	# 	mass = ndimage.sum(dens2, labels=binNum, index=range(Nbins))
+	# 	xNodes = ndimage.sum(xcoord*dens2, labels=binNum, index=range(Nbins))/mass
+	# 	yNodes = ndimage.sum(ycoord*dens2, labels=binNum, index=range(Nbins))/mass
+
+	# 	np.savetxt('./data/voroni_bins_PA0_1comp.txt', np.column_stack([np.array(xcoord), np.array(ycoord), binNum]),
+	# 				fmt=b'%10.6f %10.6f %8i')
+
+	# 	np.savetxt('./data/voroni_bins_values_PA0_1comp.txt', np.column_stack([xNode, yNode, Imap_binvals, Vfield_binvals]),
+	# 				fmt=b'%10.6f %10.6f %10.6f %10.6f')
+		
+
+	# 	# Imap_pix_binvals = np.zeros(len(binNum))
+	# 	# Vfield_pix_binvals = np.zeros(len(binNum))
+	# 	# for bb in range(Nbins):
+	# 		# Imap_pix_binvals[pixinbin] = np.median(Imap_signal[pixinbin])
+	# 		# Vfield_pix_binvals[pixinbin] = np.median(Vfield_signal[pixinbin])
 
 
-	Imap_signal = np.array(Imap_signal)
-	Vfield_signal = np.array(Vfield_signal)
+	create_asym = False
+	if create_asym == True:
+		Imap, Vfield, R_opt = model_1comp_asymmetric()
 
-	Nbins = np.nanmax(binNum)
+		plt.imshow(Imap)
+		plt.show()
+		plt.imshow(Vfield)
+		plt.show()
 
-	Imap_binvals = np.zeros(Nbins)
-	Vfield_binvals = np.zeros(Nbins)
-	Imap_pix_binvals = np.zeros(len(binNum))
-	Vfield_pix_binvals = np.zeros(len(binNum))
-	for bb in range(Nbins):
-		pixinbin = np.where(binNum == bb)[0]
-		Imap_binvals[bb] = np.median(Imap_signal[pixinbin])
-		Vfield_binvals[bb] = np.median(Vfield_signal[pixinbin])
-		Imap_pix_binvals[pixinbin] = np.median(Imap_signal[pixinbin])
-		Vfield_pix_binvals[pixinbin] = np.median(Vfield_signal[pixinbin])
-	
-	# plt.scatter(xcoord,ycoord,c=Vfield_pix_binvals)
+		xcoord = []
+		ycoord = []
+		Imap_signal = []
+		Vfield_signal = []
+		noise = []
+		for yy in range(len(Imap)):
+			for xx in range(len(Imap)):
+				xcoord.extend([xx])
+				ycoord.extend([yy])
+				Imap_signal.extend([Imap[yy,xx]])
+				Vfield_signal.extend([Vfield[yy,xx]])
+				noise.extend([1])
+
+		binNum, xNode, yNode, xBar, yBar, sn, nPixels, scale = voronoi_2d_binning(
+			np.array(xcoord), np.array(ycoord), np.array(Imap_signal), np.array(noise),  30., plot=0, quiet=0, pixelsize=1)
+
+		Imap_signal = np.array(Imap_signal)
+		Vfield_signal = np.array(Vfield_signal)
+
+		Nbins = np.nanmax(binNum)
+		Imap_binvals = np.zeros(Nbins)
+		Vfield_binvals = np.zeros(Nbins)
+
+		for bb in range(Nbins):
+			pixinbin = np.where(binNum == bb)[0]
+			Imap_binvals[bb] = np.median(Imap_signal[pixinbin])
+			Vfield_binvals[bb] = np.median(Vfield_signal[pixinbin])
+
+		
+		dens2 = (Imap_signal/np.array(noise))**4
+		mass = ndimage.sum(dens2, labels=binNum, index=range(Nbins))
+		xNodes = ndimage.sum(xcoord*dens2, labels=binNum, index=range(Nbins))/mass
+		yNodes = ndimage.sum(ycoord*dens2, labels=binNum, index=range(Nbins))/mass
+
+		# plt.scatter(xNodes,xNode)
+		# plt.show()
+
+		np.savetxt('./data/voroni_bins_HIasym.txt', np.column_stack([np.array(xcoord), np.array(ycoord), binNum]),
+					fmt=b'%10.6f %10.6f %8i')
+
+		np.savetxt('./data/voroni_bins_values_HIasym.txt', np.column_stack([xNodes, yNodes, Imap_binvals, Vfield_binvals]),
+					fmt=b'%10.6f %10.6f %10.6f %10.6f')
+
+
+	# data = np.loadtxt('./data/voroni_bins_values_HIasym.txt')
+	# plt.scatter(data[:,0],data[:,1],c = data[:,2])
 	# plt.show()
 	# exit()
 
 
-	dens2 = (Imap_signal/np.array(noise))**4
-	mass = ndimage.sum(dens2, labels=binNum, index=range(Nbins))
-	xNodes = ndimage.sum(xcoord*dens2, labels=binNum, index=range(Nbins))/mass
-	yNodes = ndimage.sum(ycoord*dens2, labels=binNum, index=range(Nbins))/mass
+	radius, costheta, R_opt = create_arrays(500, 60, 0, limit = False)
+
+	mom0 = create_mom0(radius, costheta, R_opt, R_scale = [0.5,1])
+	plt.imshow(mom0)
+	# data = np.array([data[:,0],data[:,1],data[:,2]]).T
 
 
-	data = Table.read('/home/awatts/Downloads/kinemetry/NGC2974_SAURON_kinematics.dat',format='ascii')
-
-	xNodes = data['XBIN']
-	yNodes = data['YBIN']
-	binNum = data['N']
-	Vfield_binvals = data['VEL']
+	best_ellipse_params, harmoinc_coeffs, harmonic_koeffs = harmonic_decomposition(mom0, moment = 0, centre = [250.5,250.5], image=True, LOUD = True)
 
 
-	x0 = 0
-	y0 = 0
-
-	# plt.scatter(xNodes,yNodes,c=Vfield_binvals)
-	# plt.colorbar()
-	# plt.show()
-	# exit()
-
-	toy_model = 0
-	if toy_model:
-		radius, costheta, R_opt = create_arrays(500,80,50)
-		mom0 = create_mom0(radius, costheta, R_opt, R_scale = [0.5,1.5])
-		mom1 = create_mom1(radius, costheta, 80, -1, R_opt,Vamp = [100,300])
-		# plt.imshow(mom0)
-		# plt.show()
-		# plt.imshow(mom1)
-		# plt.show()
+	plot_PA_q_koeffs(best_ellipse_params, harmonic_koeffs)
 
 
 
-	PA_q_coeffs = np.zeros([len(sample_radii),13])
-	K_coeffs = np.zeros([len(sample_radii), 5])
 
 
-
-	fig = plt.figure(figsize=(7,18))
-	gs = gridspec.GridSpec(4,1) 
-	PA_ax = fig.add_subplot(gs[0,0])
-	incl_ax = fig.add_subplot(gs[1,0])
-	K1_ax = fig.add_subplot(gs[2,0])
-	K5_ax = fig.add_subplot(gs[3,0])
-
-	PA_ax.set_ylim([30, 70])
-	incl_ax.set_ylim([0, 1.1])
-	K1_ax.set_ylim([0, 250])
-	K5_ax.set_ylim([0, 0.13])
-
-	PA_ax.plot(best_ellipse_params[:,0]*arcsec_per_pix, best_ellipse_params[:,1])
-	incl_ax.plot(best_ellipse_params[:,0]*arcsec_per_pix, best_ellipse_params[:,2])
-	K1_ax.plot(best_ellipse_params[:,0]*arcsec_per_pix, harmonic_koeffs[:,0])
-	K5_ax.plot(best_ellipse_params[:,0]*arcsec_per_pix, harmonic_koeffs[:,4]/harmonic_koeffs[:,0])
-	plt.show()
+def harmonic_decomposition(data, moment = 0, pix_scale = None, centre = [0,0], image = False, LOUD = False):
+	"""
+	data should be input as [xNodes, yNodes, binValues], o a 2D image array
+	"""
 
 
-def harmonic_decomposition(xNodes, yNodes, binValues, moment, pix_scale = False, centre = [0,0]):
+	if image == True:									#convert 2D image to image array
+		xdim = np.arange(len(data[0,:]))
+		ydim = np.arange(len(data[:,0]))
+		xNodes, yNodes = np.meshgrid(xdim, ydim)
+		data = np.array([xNodes.flatten(), yNodes.flatten(), data.flatten()]).T
 
-	if pix_scale != False								#data coordinates are already in pixels
-		xNodes /= pix_scale
-		yNodes /= pix_scale
+	if pix_scale != None:								#data coordinates are already in pixels
+		data[:,0:2] /= pix_scale
 
 	x0 = centre[0]										#estimates of image centre, default 0,0
-	y0 = centre[0]
+	y0 = centre[1]
 
-	data = np.array([xNodes,yNodes,binValues]).T
-
-	sample_radii = np.arange(201) + 1.1**(np.arange(201))
+	sample_radii = np.arange(20,201) + 1.1**(np.arange(20,201))
+	# sample_radii = [240,244,248]
 	
 	best_ellipse_params = []
 	harmonic_coeffs = []
@@ -165,12 +191,16 @@ def harmonic_decomposition(xNodes, yNodes, binValues, moment, pix_scale = False,
 	for rr in range(len(sample_radii)):
 		radius = sample_radii[rr]
 		
-		ellipse_params =  calc_best_ellipse(data, radius, x0, y0, moment = 1)			#get best fitting ellipse parameters
-		coeffs = ellipse_harmonic_expansion(ellipse_params, data, show = False)			#extract coefficients along ellipse
-		if coeffs == 0:																	#signifies ellipses are going outside range of data
+		ellipse_params = calc_best_ellipse(data, radius, x0, y0, moment = moment, LOUD=LOUD)		#get best fitting ellipse parameters
+		if LOUD == True:
+			print(ellipse_params)
+		coeffs = ellipse_harmonic_expansion(ellipse_params, data)									#extract coefficients along ellipse
+		if coeffs == None:																			#signifies ellipses are going outside range of data
 			break
 		else:
-			ellipse_params['PA'] += 90.e0 												#PA measured East of North on sky 
+			ellipse_params['PA'] += 90.e0 															#PA measured East of North on sky 
+			if pix_scale != None:
+				ellipse_params['R'] *= pix_scale													#convert to actual radius
 			best_ellipse_params.append([ellipse_params[key] for key in ['R','PA','q','x0','y0']])
 			harmonic_coeffs.append([coeffs[c] for c in 
 									['A0','A1','B1','A2','B2','A3','B3','A4','B4','A5','B5']])
@@ -184,10 +214,9 @@ def harmonic_decomposition(xNodes, yNodes, binValues, moment, pix_scale = False,
 	harmonic_coeffs = np.array(harmonic_coeffs)		
 	harmonic_koeffs = np.array(harmonic_koeffs)	
 
-	return best_ellipse_params, harmoinc_coeffs, harmonic_koeffs	
+	return best_ellipse_params, harmonic_coeffs, harmonic_koeffs	
 
-
-def calc_best_ellipse(data, radius, x0, y0, moment = 0):
+def calc_best_ellipse(data, radius, x0, y0, moment = 0, LOUD = False):
 
 	PA_range = np.linspace(-95.,95,51)
 	q_range = np.linspace(0.2,1.0,24)
@@ -197,6 +226,7 @@ def calc_best_ellipse(data, radius, x0, y0, moment = 0):
 
 	for PA in PA_range:																			#rough chi-sq gridding for input to lmfit
 		for q in q_range:
+			# print(PA,q)
 			ellipse_params['PA'] = PA
 			ellipse_params['q'] = q
 			chisq = ellipse_params_fitfunc(ellipse_params, data, LM = False)
@@ -204,8 +234,11 @@ def calc_best_ellipse(data, radius, x0, y0, moment = 0):
 				PA_min = PA
 				q_min = q
 				min_chisq = chisq
-	
-	# print('R = 'radius, 'rough fit PA = ', PA_min, 'q = ', q_min)								#best rough fit parameters
+	if LOUD == True:
+		print('Rough fit parameters')															#best rough fit parameters
+		print('R = ', radius)
+		print('PA = ', PA_min)
+		print('q = ', q_min)							
 
 	ellipse_params = Parameters()																#set up lmfit parameters and limits
 	ellipse_params.add('R', value = radius, vary=False)
@@ -224,7 +257,7 @@ def calc_best_ellipse(data, radius, x0, y0, moment = 0):
 					fcn_args = (data,), fcn_kws = {'LM':True})
 	fit_kws = {'ftol':1.e-9,'xtol':1.e-9}
 	result = mini.minimize(method='leastsq',**fit_kws)											#optimise parameters
-	# report_fit(result)
+	report_fit(result)
 
 	params = result.params.valuesdict()															#get results as a parameter dictionary
 	params['order'] = 5																			#set to extract higher order moments now the best elipse is found
@@ -233,25 +266,26 @@ def calc_best_ellipse(data, radius, x0, y0, moment = 0):
 
 def ellipse_params_fitfunc(ellipse_params, data, LM = True):
 	if LM == True:
-		ellipse_params = ellipse_params.valuesdict()							#convert lmfit parameters to a python dictionary
+		ellipse_params = ellipse_params.valuesdict()								#convert lmfit parameters to a python dictionary
 	fit_params = ellipse_harmonic_expansion(ellipse_params, data)
 
+	if fit_params == None:															#returns large chi-sq or large minimizing coeffs
+		fit_params = {'A0':1.e5,'A1':1.e5,'B1':1.e5,'A2':1.e5,'B2':1.e5,'A3':1.e5,'B3':1.e5}																
+		
 	if ellipse_params['moment'] == 0:
-		coeffs = np.array([fit_params[c] for c in ['A1','A2','B1','B2']])		#coefficients to minimze for even moments
+		coeffs = np.array([fit_params[c] for c in ['A1','A2','B1','B2']])			#coefficients to minimze for even moments
 	elif ellipse_params['moment'] == 1:
-		coeffs = np.array([fit_params[c] for c in ['A1','A3','B3']])			#coefficients to minimize for odd moments
+		coeffs = np.array([fit_params[c] for c in ['A1','A3','B3']])				#coefficients to minimize for odd moments
 	
-	if LM == True:
-		return coeffs 															#fit coefficients returned to lmfit
-	else:
-		return np.nansum(coeffs * coeffs)										#chi - squared for rough grid 
-
+	if LM == False:
+		coeffs = np.nansum(coeffs * coeffs)											#chi-sq for rough grid 
+															
+	return coeffs																	#return chisq, or coeffs to lmfit 
 
 def ellipse_harmonic_expansion(params, data, show = False):
 	phi, samples = 	sample_ellipse(params, data, show = show)
-
-	if phi == 0 and params['order'] != 3: 										#Indicates there is too much data missing from the ellipse 
-		fit_params = 0															#we dont care for rough gridding, but do for fitting the best ellipse, hence order!=3
+	if phi == None:									 									#Indicates there is too much data missing from the ellipse 
+		fit_params = None	
 	else:
 		kwargs = {'ftol':1.e-9,'xtol':1.e-9}
 		if params['order'] == 3:
@@ -275,8 +309,7 @@ def ellipse_harmonic_expansion(params, data, show = False):
 					'A4':fit[3],'B4':fit[4],'A5':fit[5],'B5':fit[6]}
 	return fit_params
 	
-
-def sample_ellipse(params, data, show = False)
+def sample_ellipse(params, data, show = False):
 	PA = params['PA'] * np.pi / 180.e0 												#apparently functions return dict's changed even if you don't return the dict, this ensures params['PA'] remains in degrees
 	Nsamp = len(np.arange(20*params['R'])[np.arange(20*params['R']) < 100])			#minimum 20 samples, decreases at lower radii. don't ask, is in IDL code
 	phi = np.linspace(0., 2.e0*np.pi, Nsamp) 
@@ -306,12 +339,13 @@ def sample_ellipse(params, data, show = False)
 		plt.show()
 
 
-	good = [np.isnan(samples) == False]
+	good = np.where(np.isnan(samples) == False)[0]
 	if len(good) < 0.75 * Nsamp:													#need at least 3/4 of the ellipse to be sampled
-		phi = 0, samples = 0
+		phi = None
+		samples = None
 	else:
-		phi = phi[good]
-		samples = samples[good]
+		phi = phi[good].tolist()
+		samples = samples[good].tolist()
 
 	return phi, samples
 
@@ -338,79 +372,43 @@ def harmonic_expansion_O5(phi, A0, A1, B1, A2, B2, A3, B3, A4, B4, A5, B5):
 
 
 
+## plotting ##
 
+def plot_PA_q_koeffs(best_ellipse_params, harmonic_koeffs):
 
+	fig = plt.figure(figsize=(7,18))
+	gs = gridspec.GridSpec(4,1) 
+	PA_ax = fig.add_subplot(gs[0,0])
+	incl_ax = fig.add_subplot(gs[1,0])
+	K1_ax = fig.add_subplot(gs[2,0])
+	K5_ax = fig.add_subplot(gs[3,0])
 
-#### non-interpolator functions ###
+	PA_ax.set_ylim([30, 70])
+	incl_ax.set_ylim([0, 1.1])
+	K1_ax.set_ylim([0, 250])
+	K5_ax.set_ylim([0, 0.13])
 
-# def sample_ellipse(data, params, show=False):
-# 	sample = []
-# 	params['PA'] *= np.pi / 180.e0
-# 	if show == True:
-# 		plt.imshow(data)
+	PA_ax.plot(best_ellipse_params[:,0], best_ellipse_params[:,1])
+	incl_ax.plot(best_ellipse_params[:,0], best_ellipse_params[:,2])
+	K1_ax.plot(best_ellipse_params[:,0], harmonic_koeffs[:,0])
+	K5_ax.plot(best_ellipse_params[:,0], harmonic_koeffs[:,4]/harmonic_koeffs[:,0])
+	plt.show()
+
+def plot_ellipse(ellipse_params, axes = None):
+	PA = params['PA'] * np.pi / 180.e0 												#apparently functions return dict's changed even if you don't return the dict, this ensures params['PA'] remains in degrees
+	phi = np.linspace(0., 2.e0*np.pi, 100) 
 	
-# 	for phi in range(360):
-# 		xgal = params['R'] * np.cos(phi * np.pi / 180.e0)
-# 		ygal = params['R'] * params['q'] * np.sin(phi * np.pi / 180.e0)
-		
-# 		xsky = xgal * np.cos(params['PA']) - ygal * np.sin(params['PA'])
-# 		ysky = xgal * np.sin(params['PA']) + ygal * np.cos(params['PA'])
-		
-# 		x_sample = int(round(xsky + params['x0']))
-# 		y_sample = int(round(ysky + params['y0']))
-# 		sample.extend([data[y_sample,x_sample]])
-	
-# 		if show == True:
-# 			plt.scatter(x_sample,y_sample,s=1)
-# 	if show == True:
-# 		plt.show()
-# 	return sample
+	xgal = params['R'] * np.cos(phi)												#galactocentric coordinates
+	ygal = params['R'] * np.sin(phi) * params['q']
 
-# def ellipse_harmonic_expansion(ellipse_params, data, LM = True):
-# 	if LM == True:
-# 		ellipse_params = ellipse_params.valuesdict()
-# 		# print(ellipse_params)
-# 	samples = sample_ellipse(data, ellipse_params)
-# 	fit_params = fit_harmonic_expansion(samples)
+	xsky = params['x0'] + xgal * np.cos(PA) - ygal * np.sin(PA)						#coorindates on image
+	ysky = params['y0'] + xgal * np.sin(PA) + ygal * np.cos(PA)
 
-# 	# if LM == True:
-# 	# 	plt.plot(samples)
-# 	# 	plt.plot(harmonic_expansion_O3(np.arange(360),fit_params['A0'],fit_params['A1'],fit_params['B1'],fit_params['A2'],
-# 	# 					fit_params['B2'],fit_params['A3'],fit_params['B3']))
-# 	# 	plt.show()
+	if axes != None:
+		axes.plot(xsky,ysky,color='Black')
+	else:
+		plt.plot(xsky,ysky,color='Black')
 
-# 	if LM == False:
-# 		chisq = calc_chisq(fit_params, moment = ellipse_params['moment'])
-# 		return chisq
-# 	else:
-# 		# print(fit_params)
-# 		if ellipse_params['moment'] == 1:
-# 			coeffs = np.array([fit_params[c] for c in ['A1','A2','B2','A3','B3']])**2.e0
-# 		elif ellipse_params['moment'] == 0:
-# 			coeffs = np.array([fit_params[c] for c in ['A1','A2','B1','B2']])**2.e0
-# 		# print(coeffs)
-# 		return coeffs
-
-# def ellipse_chisq(ellipse_params, data = None, LM = True):
-
-# 	if LM == True:
-# 		ellipse_params = ellipse_params.valuesdict()
-# 	samples = sample_ellipse(data,  ellipse_params)
-# 	fit_params = fit_harmonic_expansion(samples)
-# 	chisq = calc_chisq(fit_params, moment = ellipse_params['moment'])
-# 	# print(chisq)
-# 	return chisq
-
-
-# def calc_chisq(fit_params, moment):
-
-# 	if moment == 0:
-# 		chisq = fit_params['A1']**2.e0 + fit_params['B1']**2.e0 + fit_params['A2']**2.e0 + \
-# 				fit_params['B2']**2.e0
-# 	if moment == 1:
-# 		chisq = fit_params['A1']**2.e0 + fit_params['A2']**2.e0 + fit_params['B2']**2.e0 + \
-# 				fit_params['A3']**2.e0 + fit_params['B3']**2.e0
-# 	return chisq
 
 
 ###### mock data #####
@@ -621,7 +619,7 @@ def polyex_RC(radius, costheta, V0, scalePE, R_opt, aa, incl):
 		(1.e0 + aa * radius * R_PE)) * costheta * incl )
 	return mom1
 
-def model_intensity_velocity_map(dim = 500, GMfact = [800,1500], r0 = [0.4,1.2], re = [0.56,1.2], weights = [4,1], incl = [60,40], PA = [0,0]):
+def model_intensity_velocity_map_2comp(dim = 500, GMfact = [800,1500], r0 = [0.4,1.2], re = [0.56,1.2], weights = [4,1], incl = [60,40], PA = [0,0]):
 
 	radius, costheta_disk, Ropt = create_arrays(dim, incl[0],PA[0], limit=False)
 	radius, costheta_bulge, Ropt = create_arrays(dim, incl[1],PA[1], limit=False)
@@ -637,6 +635,18 @@ def model_intensity_velocity_map(dim = 500, GMfact = [800,1500], r0 = [0.4,1.2],
 	I = weights[0]*I_disk + weights[1]*I_bulge
 
 	return I_bulge, Vc_bulge, Ropt
+
+
+def model_1comp_asymmetric(dim = 500, incl = 40, PA = 0):
+
+	radius, costheta, R_opt = create_arrays(dim, incl, PA, limit = False)
+
+	mom0 = create_mom0(radius, costheta, R_opt, R_scale = [0.5,1])
+	
+	mom1 = create_mom1(radius, costheta, incl, -1, R_opt)
+
+	return mom0*4, mom1, R_opt
+
 
 if __name__ == '__main__':
 

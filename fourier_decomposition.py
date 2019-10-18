@@ -153,22 +153,78 @@ def main():
 
 
 	
+def HI_vel_asym_example():
+	radius, costheta, R_opt = create_arrays(500, 40, 0, limit = False)
+
+	mom0_1 = create_mom0(radius, costheta, R_opt, R_scale = [0.5,1])
+	mom1_1 = create_mom1(radius, costheta, 40, -1, R_opt)
+
+	mom0_2 = create_mom0(radius, costheta, R_opt)
+	mom1_2 = create_mom1(radius, costheta, 40, -1, R_opt, Vamp = [200,300], R_PE = [0.15,0.18])
+	
+	vel_bins, spectrum_1 = hi_spectra(mom0_1,mom1_1)
+	vel_bins, spectrum_2 = hi_spectra(mom0_2,mom1_2)
+
+
+
+	params_1, coeffs_1 = harmonic_decomposition(
+						mom0_1, moment = 0, centre = [250,250], PAQ = [0,0.766], image = True, LOUD = True)
+
+
+	data = np.loadtxt('./data/voroni_bins_values_VELasym.txt')
+	data = np.array([data[:,0],data[:,1],data[:,3]]).T
+	params_2, coeffs_2 = harmonic_decomposition(
+						data, moment = 1, centre = [250,250], PAQ = [0,0.766], LOUD = True)
+
+
+	pixbins = np.loadtxt('./data/voroni_bins_VELasym.txt')
+	binNum = pixbins[:,2]
+	mom1_pix_binvals = np.zeros(len(binNum))
+	for bb in range(int(np.max(binNum))):
+		pixinbin = np.where(binNum == bb)[0]
+		mom1_pix_binvals[pixinbin] = np.median(mom1_2.flatten()[pixinbin])
+
+	mom1_data = np.array([pixbins[:,0],pixbins[:,1], mom1_pix_binvals]).T
+
+	# plot_PA_q_koeffs(best_ellipse_params, harmonic_coeffs, moment = 1)
+
+	plot_all(mom0_1,mom1_data, params_1, params_2, coeffs_1, coeffs_2, vel_bins, spectrum_1,spectrum_2)
+
+def test_centre_fitting():
+	radius, costheta, R_opt = create_arrays(500, 40, 0, limit = False)
+
+	mom0 = create_mom0(radius, costheta, R_opt, R_scale = [0.5,1])
+
+	plt.imshow(mom0)
+	plt.show()
+	# exit()
+
+
+	print(np.where(mom0 == np.nanmax(mom0)))
+	params, coeffs = harmonic_decomposition(
+						mom0, moment = 0, centre = [250,250], image = True, LOUD = True)
 
 
 
 
+	plot_PA_q_koeffs(params,coeffs,0)
 
-def harmonic_decomposition(data, moment = 0, pix_scale = None, centre = [0,0], PAQ = False, image = False, Vsys = True, LOUD = False):
+
+
+def harmonic_decomposition(data, moment = 0, pix_scale = None, centre = [0,0], Vsys = False, PAQ = False, image = False, LOUD = False):
 	"""
 	data should be input as [xNodes, yNodes, binValues], o a 2D image array
 	"""
 
+	if moment == 0:
+		Vsys = True
 
 	if image == True:									#convert 2D image to image array
 		xdim = np.arange(len(data[0,:]))
 		ydim = np.arange(len(data[:,0]))
 		xNodes, yNodes = np.meshgrid(xdim, ydim)
 		data = np.array([xNodes.flatten(), yNodes.flatten(), data.flatten()]).T
+		
 
 	if pix_scale != None:								#data coordinates are already in pixels
 		data[:,0:2] /= pix_scale
@@ -176,7 +232,8 @@ def harmonic_decomposition(data, moment = 0, pix_scale = None, centre = [0,0], P
 	x0 = centre[0]										#estimates of image centre, default 0,0
 	y0 = centre[1]
 
-	sample_radii = np.arange(5,201) + 1.1**(np.arange(5,201))
+	sample_radii = np.arange(30,201) + 1.1**(np.arange(30,201))
+	# sample_radii  = np.array([40,60,120,180,240])
 	if image == True:
 		sample_radii = sample_radii[sample_radii < 0.5*np.max(xdim)-10]
 	# sample_radii = [240,244,248]
@@ -201,7 +258,7 @@ def harmonic_decomposition(data, moment = 0, pix_scale = None, centre = [0,0], P
 				ellipse_params['R'] *= pix_scale														#convert to actual radius
 			best_ellipse_params.append([ellipse_params[key] for key in ['R','PA','q','x0','y0']])
 			harmonic_coeffs.append([coeffs[c] for c in 
-									['A0','A05','B05','A1','B1','A2','B2','A3','B3','A4','B4','A5','B5']])
+									['A0','A1','B1','A2','B2','A3','B3','A4','B4','A5','B5']])
 
 	best_ellipse_params = np.array(best_ellipse_params)		
 	harmonic_coeffs = np.array(harmonic_coeffs)		
@@ -217,7 +274,7 @@ def calc_best_ellipse(data, radius, x0, y0, moment = 0, Vsys = True, PAQ = False
 
 	if PAQ == False:																				#get rough best PA & q for lmfit
 
-		PA_range = np.linspace(-95.,95,41)
+		PA_range = np.linspace(-95.,95,32)
 		q_range = np.linspace(0.2,1.0,24)
 
 		ellipse_params = {'R':radius, 'PA':0, 'q':0,'x0':x0,'y0':y0,'Vsys':Vsys,'moment':moment,'order':3}		#initialise parameters
@@ -244,28 +301,49 @@ def calc_best_ellipse(data, radius, x0, y0, moment = 0, Vsys = True, PAQ = False
 		ellipse_params.add('q', value = q_min, min=0.2, max=1)
 		ellipse_params.add('x0', value = x0)
 		ellipse_params.add('y0', value = y0)
+		ellipse_params.add('Vsys', value = Vsys, vary = False)
 		ellipse_params.add('moment', value = moment, vary = False)
 		ellipse_params.add('order',value = 3, vary = False)
 		
-		if moment == 0 or moment == 1:																				#centre fitting for odd moments is currently 3 parameters
+		fit_kws = {'ftol':1.e-9,'xtol':1.e-9}
+		if moment == 0 or  moment == 1:																				#centre fitting for odd moments is currently 3 parameters
 			ellipse_params['x0'].set(vary=False)													#to fit 4 variables. the paper lied. 
 			ellipse_params['y0'].set(vary=False)													#fix the centre
 
 		mini = Minimizer(ellipse_params_fitfunc, ellipse_params,									#lmfit minimizer
 						fcn_args = (data,), fcn_kws = {'LM':True})
-		fit_kws = {'ftol':1.e-9,'xtol':1.e-9}
 		result = mini.minimize(method='leastsq',**fit_kws)											#optimise parameters
 		if LOUD == True:
 			report_fit(result)
-
+		
 		params = result.params.valuesdict()															#get results as a parameter dictionary
+		
+		#### in work, probably to delete. for trying to fit the centre for the case of m=1 instabilities in intensity maps
+		# if moment == 0:
+		# 	ellipse_params['PA'].set(value = params['PA'])
+		# 	ellipse_params['q'].set(value = params['q'])
+		# 	ellipse_params['x0'].set(value = params['x0'], vary = False)
+		# 	ellipse_params['y0'].set(value = params['y0'], vary = False)
+		# 	# ellipse_params['x0'].set(vary = False)
+		# 	# ellipse_params['y0'].set(vary = False)
+		# 	mini = Minimizer(ellipse_params_fitfunc, ellipse_params,									#lmfit minimizer
+		# 				fcn_args = (data,), fcn_kws = {'LM':True})
+		# 	result = mini.minimize(method='nelder')#,**fit_kws)											#optimise parameters
+		# 	if LOUD == True:
+		# 		report_fit(result)
+		# 	params = result.params.valuesdict()															#get results as a parameter dictionary
+
+		# params['x0'] = 250
+		# params['y0'] = 250
+
+
 		params['order'] = 5																			#set to extract higher order moments now the best elipse is found								
 	else:																							#fix PA and q
 		params = {'R':radius, 'PA':PAQ[0], 'q':PAQ[1], 'x0':x0, 'y0':y0, 'Vsys':Vsys, 'moment':moment, 'order':5}		
 																												
 	return params
 
-def ellipse_params_fitfunc(ellipse_params, data, LM = True):
+def ellipse_params_fitfunc(ellipse_params, data, LM = True, order2 = False):
 	if LM == True:
 		ellipse_params = ellipse_params.valuesdict()								#convert lmfit parameters to a python dictionary
 	fit_params = ellipse_harmonic_expansion(ellipse_params, data)
@@ -274,7 +352,10 @@ def ellipse_params_fitfunc(ellipse_params, data, LM = True):
 		fit_params = {'A0':1.e5,'A1':1.e5,'B1':1.e5,'A2':1.e5,'B2':1.e5,'A3':1.e5,'B3':1.e5}																
 		
 	if ellipse_params['moment'] == 0:
-		coeffs = np.array([fit_params[c] for c in ['A1','B1','A2','B2']])			#coefficients to minimze for even moments
+		if order2 == True:
+			coeffs = np.array([fit_params[c] for c in ['A2','B2']])
+		else:
+			coeffs = np.array([fit_params[c] for c in ['A1','B1','A2','B2']])			#coefficients to minimze for even moments
 	elif ellipse_params['moment'] == 1:
 		coeffs = np.array([fit_params[c] for c in ['A1','A3','B3']])				#coefficients to minimize for odd moments
 	
@@ -308,14 +389,14 @@ def ellipse_harmonic_expansion(params, data, show = False):
 		if params['order'] == 5:
 			if params['Vsys'] == 1:
 				fit, covar = curve_fit(harmonic_expansion_O5_Vsys, phi, samples,**kwargs)
-				fit_params = {'A0':fit[0],'A05':fit[1],'B05':fit[2],'A1':fit[3],'B1':fit[4],
-						'A2':fit[5],'B2':fit[6],'A3':fit[7],'B3':fit[8],
-						'A4':fit[9],'B4':fit[10],'A5':fit[11],'B5':fit[12]}
+				fit_params = {'A0':fit[0],'A1':fit[1],'B1':fit[2],
+						'A2':fit[3],'B2':fit[4],'A3':fit[5],'B3':fit[6],
+						'A4':fit[7],'B4':fit[8],'A5':fit[9],'B5':fit[10]}
 			else:		
 				fit, covar = curve_fit(harmonic_expansion_O5, phi, samples,**kwargs)
-				fit_params = {'A0':0,'A05':fit[0],'B05':fit[1],'A1':fit[2],'B1':fit[3],
-						'A2':fit[4],'B2':fit[5],'A3':fit[6],'B3':fit[7],
-						'A4':fit[8],'B4':fit[9],'A5':fit[10],'B5':fit[11]}
+				fit_params = {'A0':0,'A1':fit[1],'B1':fit[2],
+						'A2':fit[3],'B2':fit[4],'A3':fit[5],'B3':fit[6],
+						'A4':fit[7],'B4':fit[8],'A5':fit[9],'B5':fit[10]}
 				
 	return fit_params
 	
@@ -391,10 +472,9 @@ def harmonic_expansion_odd(phi, A1, B1, A3, B3):
 		A3 * np.sin(3.e0*phi) + B3 * np.cos(3.e0*phi)
 	return H
 
-def harmonic_expansion_O5_Vsys(phi, A0, A05, B05, A1, B1, A2, B2, A3, B3, A4, B4, A5, B5):
+def harmonic_expansion_O5_Vsys(phi, A0, A1, B1, A2, B2, A3, B3, A4, B4, A5, B5):
 	#full harmonic expansion for best-fit elllipse
 	H = A0 + \
-		A05 * np.sin(0.5*phi) + B05 * np.cos(0.5*phi) +\
 		A1 * np.sin(phi) + B1 * np.cos(phi) + \
 		A2 * np.sin(2.e0*phi) + B2 * np.cos(2.e0*phi) + \
 		A3 * np.sin(3.e0*phi) + B3 * np.cos(3.e0*phi) + \
@@ -402,10 +482,9 @@ def harmonic_expansion_O5_Vsys(phi, A0, A05, B05, A1, B1, A2, B2, A3, B3, A4, B4
 		A5 * np.sin(0.5e0*phi) + B5 * np.cos(0.5e0*phi)
 	return H
 
-def harmonic_expansion_O5(phi,A05, B05, A1, B1, A2, B2, A3, B3, A4, B4, A5, B5):
+def harmonic_expansion_O5(phi, A1, B1, A2, B2, A3, B3, A4, B4, A5, B5):
 	#full harmonic expansion for best-fit elllipse
-	H = A05 * np.sin(0.5*phi) + B05 * np.cos(0.5*phi) +\
-		A1 * np.sin(phi) + B1 * np.cos(phi) + \
+	H = A1 * np.sin(phi) + B1 * np.cos(phi) + \
 		A2 * np.sin(2.e0*phi) + B2 * np.cos(2.e0*phi) + \
 		A3 * np.sin(3.e0*phi) + B3 * np.cos(3.e0*phi) + \
 		A4 * np.sin(4.e0*phi) + B4 * np.cos(4.e0*phi) + \
@@ -707,42 +786,6 @@ def plot_coeffs_radial(params, coeffs):
 
 ### examples ###
 
-def HI_vel_asym_example():
-	radius, costheta, R_opt = create_arrays(500, 40, 0, limit = False)
-
-	mom0_1 = create_mom0(radius, costheta, R_opt, R_scale = [0.5,1])
-	mom1_1 = create_mom1(radius, costheta, 40, -1, R_opt)
-
-	mom0_2 = create_mom0(radius, costheta, R_opt)
-	mom1_2 = create_mom1(radius, costheta, 40, -1, R_opt, Vamp = [200,300], R_PE = [0.15,0.18])
-	
-	vel_bins, spectrum_1 = hi_spectra(mom0_1,mom1_1)
-	vel_bins, spectrum_2 = hi_spectra(mom0_2,mom1_2)
-
-
-
-	params_1, coeffs_1 = harmonic_decomposition(
-						mom0_1, moment = 0, centre = [250,250], PAQ = [0,0.766], image = True, LOUD = True)
-
-
-	data = np.loadtxt('./data/voroni_bins_values_VELasym.txt')
-	data = np.array([data[:,0],data[:,1],data[:,3]]).T
-	params_2, coeffs_2 = harmonic_decomposition(
-						data, moment = 1, centre = [250,250], PAQ = [0,0.766], LOUD = True)
-
-
-	pixbins = np.loadtxt('./data/voroni_bins_VELasym.txt')
-	binNum = pixbins[:,2]
-	mom1_pix_binvals = np.zeros(len(binNum))
-	for bb in range(int(np.max(binNum))):
-		pixinbin = np.where(binNum == bb)[0]
-		mom1_pix_binvals[pixinbin] = np.median(mom1_2.flatten()[pixinbin])
-
-	mom1_data = np.array([pixbins[:,0],pixbins[:,1], mom1_pix_binvals]).T
-
-	# plot_PA_q_koeffs(best_ellipse_params, harmonic_coeffs, moment = 1)
-
-	plot_all(mom0_1,mom1_data, params_1, params_2, coeffs_1, coeffs_2, vel_bins, spectrum_1,spectrum_2)
 
 ###### mock data #####
 def create_arrays(dim, incl, PA, limit=True):
@@ -994,6 +1037,7 @@ def hi_spectra(mom0, mom1):
 
 if __name__ == '__main__':
 
-	main()
+	# main()
+	test_centre_fitting()
 
 

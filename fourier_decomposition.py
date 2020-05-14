@@ -7,7 +7,6 @@ harmonic coefficients, and subsequently extracting the harmonic decomposition
 
 
 
-
 Adapted from the IDL code Kinemetry. 
 IF YOU USE THIS CODE TO PERFORM HARMONIC DECOMPOSITION OF DATA 
 PLEASE CITE Krajnovic et al. 2006, MNRAS 336, 787; THE ORIGINAL DEVELOPERS OF THE METHOD

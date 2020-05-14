@@ -211,51 +211,59 @@ def test_centre_fitting():
 
 
 
-def harmonic_decomposition(data, moment = 0, pix_scale = None, centre = [0,0], Vsys = False, PAQ = False, image = False, LOUD = False):
+def harmonic_decomposition(data, moment = 0, pixel_scale = 1, centre = False, radii = 'log', Vsys = True, PAQ = False, image = False, LOUD = False):
 	"""
-	data should be input as [xNodes, yNodes, binValues], o a 2D image array
+	data should be input as [xNodes, yNodes, binValues], or a 2D image array
 	"""
+	if radii == 'log':
+		sample_radii = np.arange(1,201) + 1.1**(np.arange(1,201))
+	elif radii == 'linear':
+		sample_radii = np.arange(1,201)
 
-	if moment == 0:
-		Vsys = True
+	if centre != False:
+		x0 = centre[0]
+		y0 = centre[1]
 
-	if image == True:									#convert 2D image to image array
-		xdim = np.arange(len(data[0,:]))
+
+	if image == True:											
+		pixel_scale = 1											#data already in pixels
+		if centre == False:		
+			x0 = 0.5e0 * len(data[0,:])
+			y0 = 0.5e0 * len(data[:,0])							
+		xdim = np.arange(len(data[0,:]))						#convert 2D image to flattened 1d arrays
 		ydim = np.arange(len(data[:,0]))
 		xNodes, yNodes = np.meshgrid(xdim, ydim)
 		data = np.array([xNodes.flatten(), yNodes.flatten(), data.flatten()]).T
-		
-
-	if pix_scale != None:								#data coordinates are already in pixels
-		data[:,0:2] /= pix_scale
-
-	x0 = centre[0]										#estimates of image centre, default 0,0
-	y0 = centre[1]
-
-	sample_radii = np.arange(30,201) + 1.1**(np.arange(30,201))
-	# sample_radii  = np.array([40,60,120,180,240])
-	if image == True:
 		sample_radii = sample_radii[sample_radii < 0.5*np.max(xdim)-10]
-	# sample_radii = [240,244,248]
+
+	data[:,0:2] /= pixel_scale												#convert to pixel scale
+	x0 /= pixel_scale														#estimates of image centre, default 0,0
+	y0 /= pixel_scale
+
+	if moment == 0:												#must fit for surface brightness
+		Vsys = True
 	
 	best_ellipse_params = []
 	harmonic_coeffs = []
-	harmonic_koeffs = []
-
+	# sample_radii = [15]
+	# print(sample_radii)
 	for rr in range(len(sample_radii)):
 		radius = sample_radii[rr]
-		print(radius)
 		ellipse_params = calc_best_ellipse(data, radius, x0, y0, moment = moment, 
-											Vsys = Vsys, PAQ = PAQ, LOUD=LOUD)							#get best fitting ellipse parameters
-
+											Vsys = Vsys, PAQ = PAQ, image = image, LOUD=LOUD)							#get best fitting ellipse parameters
+		if LOUD:
+			print(ellipse_params)
 		coeffs = ellipse_harmonic_expansion(ellipse_params, data, show=False)							#extract coefficients along ellipse
-		print(coeffs)
 		if coeffs == None:																				#signifies ellipses are going outside range of data
 			break
 		else:
+			if LOUD:
+				print(coeffs)
 			ellipse_params['PA'] += 90.e0 																#PA measured East of North on sky 
-			if pix_scale != None:
-				ellipse_params['R'] *= pix_scale														#convert to actual radius
+			if pixel_scale != None:
+				ellipse_params['R'] *= pixel_scale														#convert to actual radius
+				ellipse_params['x0'] *= pixel_scale														#convert to actual radius
+				ellipse_params['y0'] *= pixel_scale														#convert to actual radius
 			best_ellipse_params.append([ellipse_params[key] for key in ['R','PA','q','x0','y0']])
 			harmonic_coeffs.append([coeffs[c] for c in 
 									['A0','A1','B1','A2','B2','A3','B3','A4','B4','A5','B5']])
@@ -265,19 +273,33 @@ def harmonic_decomposition(data, moment = 0, pix_scale = None, centre = [0,0], V
 
 	return best_ellipse_params, harmonic_coeffs
 
-def calc_best_ellipse(data, radius, x0, y0, moment = 0, Vsys = True, PAQ = False, LOUD = False):
+def calc_best_ellipse(data, radius, x0, y0, moment = 0, Vsys = True, image = False, PAQ = False, LOUD = False):
 
 	if Vsys == True:
 		Vsys = 1
 	else:
 		Vsys = 0
 
+	if image == True:
+		image = 1
+		print('Using image data')
+	else:
+		image = 0
+
 	if PAQ == False:																				#get rough best PA & q for lmfit
 
 		PA_range = np.linspace(-95.,95,32)
 		q_range = np.linspace(0.2,1.0,24)
 
-		ellipse_params = {'R':radius, 'PA':0, 'q':0,'x0':x0,'y0':y0,'Vsys':Vsys,'moment':moment,'order':3}		#initialise parameters
+		ellipse_params = {'R':radius,																#initialise parameters
+						'PA':0,
+						'q':0,
+						'x0':x0,
+						'y0':y0,
+						'Vsys':Vsys,
+						'image':image,
+						'moment':moment,
+						'order':3}		
 		min_chisq = 1.e11																			#BIIG
 
 		for PA in PA_range:																			#rough chi-sq gridding for input to lmfit
@@ -303,18 +325,19 @@ def calc_best_ellipse(data, radius, x0, y0, moment = 0, Vsys = True, PAQ = False
 		ellipse_params.add('y0', value = y0)
 		ellipse_params.add('Vsys', value = Vsys, vary = False)
 		ellipse_params.add('moment', value = moment, vary = False)
+		ellipse_params.add('image', value = image, vary = False)
 		ellipse_params.add('order',value = 3, vary = False)
 		
 		fit_kws = {'ftol':1.e-9,'xtol':1.e-9}
-		if moment == 0 or  moment == 1:																				#centre fitting for odd moments is currently 3 parameters
+		if moment == 1:																				#centre fitting for odd moments is currently 3 parameters
 			ellipse_params['x0'].set(vary=False)													#to fit 4 variables. the paper lied. 
 			ellipse_params['y0'].set(vary=False)													#fix the centre
 
 		mini = Minimizer(ellipse_params_fitfunc, ellipse_params,									#lmfit minimizer
 						fcn_args = (data,), fcn_kws = {'LM':True})
 		result = mini.minimize(method='leastsq',**fit_kws)											#optimise parameters
-		if LOUD == True:
-			report_fit(result)
+		# if LOUD == True:
+		report_fit(result)
 		
 		params = result.params.valuesdict()															#get results as a parameter dictionary
 		
@@ -339,7 +362,15 @@ def calc_best_ellipse(data, radius, x0, y0, moment = 0, Vsys = True, PAQ = False
 
 		params['order'] = 5																			#set to extract higher order moments now the best elipse is found								
 	else:																							#fix PA and q
-		params = {'R':radius, 'PA':PAQ[0], 'q':PAQ[1], 'x0':x0, 'y0':y0, 'Vsys':Vsys, 'moment':moment, 'order':5}		
+		params = {'R':radius,
+				'PA':PAQ[0],
+				'q':PAQ[1],
+				'x0':x0,
+				'y0':y0,
+				'Vsys':Vsys,
+				'image':image,
+				'moment':moment,
+				'order':5}		
 																												
 	return params
 
@@ -394,37 +425,76 @@ def ellipse_harmonic_expansion(params, data, show = False):
 						'A4':fit[7],'B4':fit[8],'A5':fit[9],'B5':fit[10]}
 			else:		
 				fit, covar = curve_fit(harmonic_expansion_O5, phi, samples,**kwargs)
-				fit_params = {'A0':0,'A1':fit[1],'B1':fit[2],
-						'A2':fit[3],'B2':fit[4],'A3':fit[5],'B3':fit[6],
-						'A4':fit[7],'B4':fit[8],'A5':fit[9],'B5':fit[10]}
+				fit_params = {'A0':0,'A1':fit[0],'B1':fit[1],
+						'A2':fit[2],'B2':fit[3],'A3':fit[4],'B3':fit[5],
+						'A4':fit[6],'B4':fit[7],'A5':fit[8],'B5':fit[9]}
 				
 	return fit_params
 	
 def sample_ellipse(params, data, show = False):
 	PA = params['PA'] * np.pi / 180.e0 												#apparently functions return dict's changed even if you don't return the dict, this ensures params['PA'] remains in degrees
-	Nsamp = len(np.arange(20*params['R'])[np.arange(20*params['R']) < 100])			#minimum 20 samples, decreases at lower radii. don't ask, is in IDL code
-	phi = np.linspace(0., 2.e0*np.pi, Nsamp) 
 	
-	xgal = params['R'] * np.cos(phi)												#galactocentric coordinates
-	ygal = params['R'] * np.sin(phi) * params['q']
+	
+	
 
-	xsky = params['x0'] + xgal * np.cos(PA) - ygal * np.sin(PA)						#coorindates on image
-	ysky = params['y0'] + xgal * np.sin(PA) + ygal * np.cos(PA)
-
-	if params['moment'] == 0:
+	if params['image'] == 0:
+		print('sampling from Voronoi binned data')
+		Nsamp = len(np.arange(20*params['R'])[np.arange(20*params['R']) < 100])			#minimum 20 samples, decreases at lower radii. don't ask, is in IDL code
+		phi = np.linspace(0., 2.e0*np.pi, Nsamp) 
 		samples = np.zeros(Nsamp)
-		for ss in range(Nsamp):
-			kernel = np.where((data[:,0] < xsky[ss] + 3) & (data[:,0] > xsky[ss] - 3) &
-							(data[:,1] < ysky[ss] + 3) & (data[:,1] > ysky[ss] - 3))[0]
-			interp_x = data[kernel,0]
-			interp_y = data[kernel,1]
-			interp_data = data[kernel,2]
-			samples[ss] = griddata(np.array([interp_x,interp_y]).T,interp_data,np.array([xsky[ss],ysky[ss]]))
+	
+		xgal = params['R'] * np.cos(phi)												#galactocentric coordinates
+		ygal = params['R'] * np.sin(phi) * params['q']
+
+		xsky = params['x0'] + xgal * np.cos(PA) - ygal * np.sin(PA)						#coorindates on image
+		ysky = params['y0'] + xgal * np.sin(PA) + ygal * np.cos(PA)
 
 
-	if params['moment'] == 1:
 		sample_coords = np.array([xsky,ysky]).T
 		samples = griddata(data[:,0:2], data[:,2], sample_coords)						#interpolate. consistent with IDL griddata usage
+
+	if params['image'] == 1:
+		print('sampling from an image')
+		Nsamp = len(np.arange(20*params['R'])[np.arange(20*params['R']) < 64])			#minimum 20 samples, decreases at lower radii. don't ask, is in IDL code
+		phi = np.linspace(0., 2.e0*np.pi, Nsamp) 
+		samples = np.zeros(Nsamp)
+		
+		if params['R'] < 10000:
+			xgal = params['R'] * np.cos(phi)												#galactocentric coordinates
+			ygal = params['R'] * np.sin(phi) * params['q']
+
+			xsky = params['x0'] + xgal * np.cos(PA) - ygal * np.sin(PA)						#coorindates on image
+			ysky = params['y0'] + xgal * np.sin(PA) + ygal * np.cos(PA)
+
+			sample_coords = np.array([xsky,ysky]).T
+			samples = griddata(data[:,0:2], data[:,2], sample_coords)						#interpolate. consistent with IDL griddata usage
+
+		else:
+
+			xsky = np.zeros(Nsamp)
+			ysky = np.zeros(Nsamp)
+
+			radius_aper = np.array([0.5,-0.5,-0.5,0.5]) * 0.1 * params['R'] + params['R']
+			phi_aper = np.array([-0.5,-0.5,0.5,0.5]) * np.diff(phi)[0]
+
+			for ss in range(Nsamp):
+
+				xaper = radius_aper * np.cos(phi_aper + phi[ss])											#galactocentric aperature coordinates
+				yaper = radius_aper * np.sin(phi_aper + phi[ss]) * params['q']
+
+				xsector = params['x0'] + xaper * np.cos(PA) - yaper * np.sin(PA)						#coorindates on image
+				ysector = params['y0'] + xaper * np.sin(PA) + yaper * np.cos(PA)
+
+				# data_nearsector = np.where((data[:,0] < np.max(xsector) + 10) & (data[:,0] > np.min(xsector) - 10) &
+				# 					(data[:,1] < np.max(ysector) + 10) & (data[:,1] > np.min(ysector) - 10) )[0]
+				# data_nearsector = data[data_nearsector]
+			
+				insector = inside_polygon(data[:,0:2], xsector, ysector)
+				
+				xsky[ss] = np.median(data[insector,0])
+				ysky[ss] = np.median(data[insector,1])
+				samples[ss] = np.mean(data[insector,2])
+
 
 	if show == True:
 		fig = plt.figure(figsize=(16,8))
@@ -436,7 +506,7 @@ def sample_ellipse(params, data, show = False):
 		ynodes = data[:,1]
 		bin_values = data[:,2]
 		ellipse_ax.scatter(xnodes,ynodes, c=bin_values)
-		ellipse_ax.scatter(xsky,ysky,s=1,color='Black')
+		ellipse_ax.scatter(xsky,ysky,s=1, color='Black')
 
 		sample_ax.plot(phi,samples, color='Black')
 		sample_ax.set_xlabel('Azimuth $\phi$',fontsize=15)
@@ -491,7 +561,67 @@ def harmonic_expansion_O5(phi, A1, B1, A2, B2, A3, B3, A4, B4, A5, B5):
 		A5 * np.sin(5.e0*phi) + B5 * np.cos(5.e0*phi)
 	return H
 
-# def extract_aperature():
+def sample_aperature(params, data):
+	PA = params['PA'] * np.pi / 180.e0 												#apparently functions return dict's changed even if you don't return the dict, this ensures params['PA'] remains in degrees
+	Nsamp = len(np.arange(20*params['R'])[np.arange(20*params['R']) < 100])			#minimum 20 samples, decreases at lower radii. don't ask, is in IDL code
+	phi = np.linspace(0., 2.e0*np.pi, Nsamp) 
+	sample = np.zeros(Nsamp)
+	
+	radius_aper = np.array([0.5,-0.5,-0.5,0.5]) * 0.1 * params['R'] + params['R']
+	phi_aper = np.array([-0.5,-0.5,0.5,0.5]) * np.diff(phi)[0]
+
+	for ii in range(Nsamp):
+
+		xaper = radius_aper * np.cos(phi_aper + phi[ii])											#galactocentric aperature coordinates
+		yaper = radius_aper * np.sin(phi_aper + phi[ii]) * params['q']
+
+		xsector = params['x0'] + xaper * np.cos(PA) - yaper * np.sin(PA)						#coorindates on image
+		ysector = params['y0'] + xaper * np.sin(PA) + yaper * np.cos(PA)
+
+		# data_nearsector = np.where((data[:,0] < np.max(xsector) + 10) & (data[:,0] > np.min(xsector) - 10) &
+		# 					(data[:,1] < np.max(ysector) + 10) & (data[:,1] > np.min(ysector) - 10) )[0]
+		# data_nearsector = data[data_nearsector]
+	
+		insector = inside_polygon(data[:,0:2], xsector, ysector)
+
+		sample[ii] = np.mean(data[insector,2])
+
+	good = np.where(np.isnan(samples) == False)[0]
+	if len(good) < 0.75 * Nsamp:													#need at least 3/4 of the ellipse to be sampled
+		phi = None
+		samples = None
+	else:
+		phi = phi[good].tolist()
+		samples = samples[good].tolist()
+
+	return phi, samples
+
+
+
+def inside_polygon(coordinates, poly_x,poly_y):
+	#inspired by /copied from  the IDL-coyote routine inside
+	poly_x = np.append(poly_x,poly_x[0])					#close polygon
+	poly_y = np.append(poly_y,poly_y[0])
+
+	vec1_x = poly_x[0:-1] - np.array([coordinates[:,0],]*4).T  				#verticies 0 -> N-1
+	vec1_y = poly_y[0:-1] - np.array([coordinates[:,1],]*4).T  
+
+	vec2_x = poly_x[1::] - np.array([coordinates[:,0],]*4).T  					#vertices 1 -> N
+	vec2_y = poly_y[1::] - np.array([coordinates[:,1],]*4).T  
+
+	dot_prod = vec1_x * vec2_x + vec1_y * vec2_y
+	cross_prod = vec1_x * vec2_y - vec1_y * vec2_x
+
+	theta = np.arctan(cross_prod / dot_prod)
+	# plt.imshow((np.nansum(theta, axis = 1)/np.pi).reshape((500,500)))
+	# plt.show()
+
+	in_polygon = np.where(np.abs(np.nansum(theta, axis = 1)) > 0.01)[0]					#get total of angles. will be near 2pi if in polygon
+
+	return in_polygon
+
+
+
 
 
 ## plotting ##
@@ -513,7 +643,7 @@ def plot_PA_q_koeffs(best_ellipse_params, harmonic_coeffs, moment):
 	K1_ax = fig.add_subplot(gs[2,0])
 	K5_ax = fig.add_subplot(gs[3,0])
 
-	PA_ax.set_ylim([45, 135])
+	PA_ax.set_ylim([0, 180])
 	q_ax.set_ylim([0, 1.1])
 
 	PA_ax.tick_params(axis = 'x', which = 'both', direction = 'in', labelsize = 0)
@@ -523,20 +653,19 @@ def plot_PA_q_koeffs(best_ellipse_params, harmonic_coeffs, moment):
 	PA_ax.plot(best_ellipse_params[:,0], best_ellipse_params[:,1])
 	q_ax.plot(best_ellipse_params[:,0], best_ellipse_params[:,2])
 
-	PA_ax.set_title('Asym Vel, centre brightest pixel fit PAQ')
+	# PA_ax.set_title('Asym Vel, centre brightest pixel fit PAQ')
 
 	if moment == 0:
 		K1_ax.plot(best_ellipse_params[:,0], A0)
 		K5_ax.plot(best_ellipse_params[:,0], K1/A0)
 
-		K1_ax.set_ylim([0.05,1])
+		K1_ax.set_ylim([0,np.max(A0)*1.1])
 		K5_ax.set_ylim([0, 1])
-
 
 
 	if moment == 1:
 		K1_ax.plot(best_ellipse_params[:,0], K1)
-		K5_ax.plot(best_ellipse_params[:,0], K4/K1)
+		K5_ax.plot(best_ellipse_params[:,0], (K3+K5)/(2*K1))
 
 		K1_ax.set_ylim([0,300])
 		K5_ax.set_ylim([0, 0.15])
@@ -663,37 +792,32 @@ def plot_all(mom0_data, mom1_data, params_1, params_2, coeffs_1, coeffs_2, vel_b
 	fig.savefig('./data/test.png',dpi=200)
 
 
-def plot_coeffs_radial(params, coeffs):
+def plot_coeffs_radial(params, coeffs,save = None):
 	
 	radius = params[:,0]
-	
 
 	fig = plt.figure(figsize=(15,8))
 	gs = gridspec.GridSpec(8,4, hspace = 0.0, left = 0.05, right=0.99, top=0.99, bottom=0.0, wspace=0.25) 
 	
 	A0_ax = fig.add_subplot(gs[0,0])
-	A05_ax = fig.add_subplot(gs[1,0])
 	A1_ax = fig.add_subplot(gs[2,0])
 	A2_ax = fig.add_subplot(gs[3,0])
 	A3_ax = fig.add_subplot(gs[4,0])
 	A4_ax = fig.add_subplot(gs[5,0])
 	A5_ax = fig.add_subplot(gs[6,0])
 
-	B05_ax = fig.add_subplot(gs[1,1])
 	B1_ax = fig.add_subplot(gs[2,1])
 	B2_ax = fig.add_subplot(gs[3,1])
 	B3_ax = fig.add_subplot(gs[4,1])
 	B4_ax = fig.add_subplot(gs[5,1])
 	B5_ax = fig.add_subplot(gs[6,1])
 	
-	K05_ax = fig.add_subplot(gs[1,2])
 	K1_ax = fig.add_subplot(gs[2,2])
 	K2_ax = fig.add_subplot(gs[3,2])
 	K3_ax = fig.add_subplot(gs[4,2])
 	K4_ax = fig.add_subplot(gs[5,2])
 	K5_ax = fig.add_subplot(gs[6,2])
 
-	E05_ax = fig.add_subplot(gs[1,3])
 	E1_ax = fig.add_subplot(gs[2,3])
 	E2_ax = fig.add_subplot(gs[3,3])
 	E3_ax = fig.add_subplot(gs[4,3])
@@ -706,41 +830,25 @@ def plot_coeffs_radial(params, coeffs):
 
 	# def polyex_RC(radius, costheta, V0, scalePE, R_opt, aa, incl)
 
-	ax_list = [[A05_ax,A1_ax, A2_ax, A3_ax, A4_ax, A5_ax],
-				[B05_ax,B1_ax, B2_ax, B3_ax, B4_ax, B5_ax],
-				[K05_ax,K1_ax, K2_ax, K3_ax, K4_ax, K5_ax],
-				[E05_ax,E1_ax, E2_ax, E3_ax, E4_ax, E5_ax]]
+	ax_list = [[A1_ax, A2_ax, A3_ax, A4_ax, A5_ax],
+				[B1_ax, B2_ax, B3_ax, B4_ax, B5_ax],
+				[K1_ax, K2_ax, K3_ax, K4_ax, K5_ax],
+				[E1_ax, E2_ax, E3_ax, E4_ax, E5_ax]]
 
 	A0_ax.plot(radius,coeffs[:,0], color = 'Black')
 	A0_ax.set_ylabel('A$_0$')		
-	A05_ax.set_ylabel('A$_{05}$')		
-	B05_ax.set_ylabel('B$_{05}$')		
-	K05_ax.set_ylabel('K$_{05}$')		
-	E05_ax.set_ylabel('$\phi_{05}$')		
-	for ii in range(6):
+	for ii in range(5):
 		for jj in range(2):
 			ax_list[jj][ii].plot(radius,coeffs[:,2*ii + jj+1], color = 'Black')
 		ax_list[2][ii].plot(radius,np.sqrt(coeffs[:,2*ii+1]**2.e0 + coeffs[:,2*ii+1+1]**2.e0), color = 'Black')
 		ax_list[3][ii].plot(radius,np.arctan(coeffs[:,2*ii+1]/coeffs[:,2*ii+1+1]), color = 'Black')
-		if ii >= 1:
-			ax_list[0][ii].set_ylabel('A$_{}$'.format(ii))
-			ax_list[1][ii].set_ylabel('B$_{}$'.format(ii))
-			ax_list[2][ii].set_ylabel('K$_{}$'.format(ii))
-			ax_list[3][ii].set_ylabel('$\phi_{}$'.format(ii))
+		ax_list[0][ii].set_ylabel('A$_{}$'.format(ii+1))
+		ax_list[1][ii].set_ylabel('B$_{}$'.format(ii+1))
+		ax_list[2][ii].set_ylabel('K$_{}$'.format(ii+1))
+		ax_list[3][ii].set_ylabel('$\phi_{}$'.format(ii+1))
 
 
-	RC_app = polyex_RC(radius,1,300,0.18,125,0.002,40)
-	RC_rec = polyex_RC(radius,1,200,0.16,125,0.002,40)
 	
-	K1_ax.plot(radius,RC_app, color='Orange')
-	K1_ax.plot(radius,RC_rec, Color='Green')
-	K1_ax.plot(radius,0.5 * (RC_app + RC_rec), color='Blue',ls='--')
-	# K1_ax.plot(radius,RC_app - RC_rec, color='Green',ls = '--')
-	# K2_ax.plot(radius,RC_app - RC_rec, color='Green',ls = '--')
-	# K2_ax.plot(radius,np.sqrt(coeffs[:,3]**2.e0 + coeffs[:,4]**2.e0) + np.sqrt(coeffs[:,9]**2.e0 + coeffs[:,10]**2.e0),color='Blue',ls='--')
-	K1_ax.plot(radius,coeffs[:,4] - coeffs[:,0] + np.sqrt(coeffs[:,1]**2.e0 + coeffs[:,2]**2.e0) + np.sqrt(coeffs[:,5]**2.e0 + coeffs[:,6]**2.e0) ,color='Magenta',ls='--')
-	K1_ax.plot(radius,coeffs[:,4]  + coeffs[:,0] -  np.sqrt(coeffs[:,1]**2.e0 + coeffs[:,2]**2.e0),color='Magenta',ls='--')
-
 	A5_ax.set_xlabel('Radius')
 	B5_ax.set_xlabel('Radius')
 	K5_ax.set_xlabel('Radius')
@@ -748,14 +856,12 @@ def plot_coeffs_radial(params, coeffs):
 
 
 	A0_ax.set_ylim([-20,20])
-	A05_ax.set_ylim([-30,30])
 	A1_ax.set_ylim([-2,2])
 	A2_ax.set_ylim([-2,2])
 	A3_ax.set_ylim([-1,1])
 	A4_ax.set_ylim([-1,1])
 	A5_ax.set_ylim([-1,1])
 
-	B05_ax.set_ylim([-1,1])
 	B1_ax.set_ylim([0,250])
 	B2_ax.set_ylim([-20,20])
 	B3_ax.set_ylim([-1,1])
@@ -763,7 +869,6 @@ def plot_coeffs_radial(params, coeffs):
 	B5_ax.set_ylim([-1,1])
 	
 
-	K05_ax.set_ylim([-30,30])
 	K1_ax.set_ylim([0,250])
 	K2_ax.set_ylim([-20,20])
 	K3_ax.set_ylim([-1,1])
@@ -776,12 +881,133 @@ def plot_coeffs_radial(params, coeffs):
 	E4_ax.set_ylim([-1.8,1.8])
 	E5_ax.set_ylim([-1.8,1.8])
 
-	fig.suptitle('Sym velocity, Vsys = fixed @ 0, fit order 0.5',fontsize = 20)
-	fig.savefig('./data/coeffs_Symvel_Vsys0_fit0.5.png',dpi=200)
-	plt.show()
+	# fig.suptitle('Sym velocity, Vsys = fixed @ 0, fit order 0.5',fontsize = 20)
+	if save != None:
+		fig.savefig(save,dpi=200)
+	else:
+		plt.show()
+
+def plot_radial_asym_measures(params0, params1, coeffs0, coeffs1, mom0_data, mom1_data, pixel_scale, save = None):
+	
+	radius0 = params0[:,0]*pixel_scale
+	radius1 = params1[:,0]*pixel_scale
+
+	A0_1 = coeffs0[:,0]
+	K1_1 = np.sqrt( coeffs0[:,1]**2.e0 + coeffs0[:,2]**2.e0 )
+	K2_1 = np.sqrt( coeffs0[:,3]**2.e0 + coeffs0[:,4]**2.e0 )
+	K3_1 = np.sqrt( coeffs0[:,5]**2.e0 + coeffs0[:,6]**2.e0 )
+	K4_1 = np.sqrt( coeffs0[:,7]**2.e0 + coeffs0[:,8]**2.e0 )
+	K5_1 = np.sqrt( coeffs0[:,9]**2.e0 + coeffs0[:,10]**2.e0 )
+
+	A0_2 = coeffs1[:,0]
+	K1_2 = np.sqrt( coeffs1[:,1]**2.e0 + coeffs1[:,2]**2.e0 )
+	K2_2 = np.sqrt( coeffs1[:,3]**2.e0 + coeffs1[:,4]**2.e0 )
+	K3_2 = np.sqrt( coeffs1[:,5]**2.e0 + coeffs1[:,6]**2.e0 )
+	K4_2 = np.sqrt( coeffs1[:,7]**2.e0 + coeffs1[:,8]**2.e0 )
+	K5_2 = np.sqrt( coeffs1[:,9]**2.e0 + coeffs1[:,10]**2.e0 )
+
+	fig = plt.figure(figsize=(15,20))
+	gs = gridspec.GridSpec(7,2, hspace = 0.22, left = 0.05,right=0.99,top=0.99,bottom=0.03,wspace=0.15) 
+	
+	mom0_ax = fig.add_subplot(gs[0:2,0])
+	PA_ax_1 = fig.add_subplot(gs[2,0])
+	q_ax_1 = fig.add_subplot(gs[3,0],sharex = PA_ax_1)
+	A0_ax_1 = fig.add_subplot(gs[4,0],sharex = PA_ax_1)
+	K1A0_ax = fig.add_subplot(gs[5,0],sharex = PA_ax_1)
+	K2A0_ax = fig.add_subplot(gs[6,0],sharex = PA_ax_1)
+
+	mom1_ax = fig.add_subplot(gs[0:2,1])
+	PA_ax_2 = fig.add_subplot(gs[2,1],sharex = PA_ax_1)
+	q_ax_2 = fig.add_subplot(gs[3,1],sharex = PA_ax_1)
+	K1_ax = fig.add_subplot(gs[4,1],sharex = PA_ax_1)
+	vasym_ax = fig.add_subplot(gs[5,1],sharex = PA_ax_1)
+	A0_ax_2 = fig.add_subplot(gs[6,1],sharex = PA_ax_1)
+
+
+	PA_ax_1.tick_params(axis = 'x', which = 'both', direction = 'in', labelsize = 0)
+	q_ax_1.tick_params(axis = 'x', which = 'both', direction = 'in', labelsize = 0)
+	A0_ax_1.tick_params(axis = 'x', which = 'both', direction = 'in', labelsize = 0)
+	K1A0_ax.tick_params(axis = 'x', which = 'both', direction = 'in', labelsize = 0)
+
+	PA_ax_2.tick_params(axis = 'x', which = 'both', direction = 'in', labelsize = 0)
+	q_ax_2.tick_params(axis = 'x', which = 'both', direction = 'in', labelsize = 0)
+	K1_ax.tick_params(axis = 'x', which = 'both', direction = 'in', labelsize = 0)
+	vasym_ax.tick_params(axis = 'x', which = 'both', direction = 'in', labelsize = 0)
 
 
 
+	# for ii in range(len(params_1)-10,len(params_1)):
+	# 	plot_ellipse(params_1[ii,:], axes = HI_ax)
+
+	# velmap = Vel_ax.scatter(mom1_data[:,0],mom1_data[:,1],c=mom1_data[:,2])
+	# for ii in range(len(params_2)-10,len(params_2)):
+	# 	plot_ellipse(params_2[ii,:], axes = Vel_ax)
+
+
+	mom0_ax.set_aspect('equal')
+	mom1_ax.set_aspect('equal')
+
+	mom0_ax.imshow(mom0_data, extent = [-50,50,-50,50],aspect = 'equal')
+	mom1_ax.imshow(mom1_data, extent = [-50,50,-50,50],aspect = 'equal')
+
+	mom0_ax.tick_params(axis = 'both', which = 'both', direction = 'in', labelsize = 10,top=False,right=False)
+	mom1_ax.tick_params(axis = 'both', which = 'both', direction = 'in', labelsize = 10,top=False,right=False)
+
+	for ii in range(1):
+		plot_ellipse([10*(ii+1),params0[0,1],params0[0,2],pixel_scale*(params0[0,3] - 0.5*len(mom0_data)),pixel_scale*(params0[0,4] - 0.5*len(mom0_data))],axes = mom0_ax)
+		plot_ellipse([10*(ii+1),params0[0,1],params0[0,2],pixel_scale*(params0[0,3] - 0.5*len(mom0_data)),pixel_scale*(params0[0,4] - 0.5*len(mom0_data))],axes = mom1_ax)
+
+
+	PA_ax_1.plot(radius0, params0[:,1])
+	q_ax_1.plot(radius0, params0[:,2])
+	A0_ax_1.plot(radius0, A0_1)
+	K1A0_ax.plot(radius0, K1_1/A0_1)
+	K2A0_ax.plot(radius0, K2_1/A0_1)
+
+	PA_ax_2.plot(radius1, params1[:,1])
+	q_ax_2.plot(radius1, params1[:,2])
+	K1_ax.plot(radius1, K1_2)
+	vasym_ax.plot(radius1,np.abs((K5_2 + K3_2)/ (2*K1_2)))
+	A0_ax_2.plot(radius1, A0_2)
+
+
+	PA_ax_1.set_ylabel('PA [deg]')
+	PA_ax_2.set_ylabel('PA [deg]')
+
+	q_ax_1.set_ylabel('q [cos(i)]')
+	q_ax_2.set_ylabel('q [cos(i)]')
+
+	A0_ax_1.set_ylabel('A0 : Surface brightness')
+	K1_ax.set_ylabel('K1 : Circular Velocity')
+
+	K1A0_ax.set_ylabel('K1/A0 : m = 1 amplutude')
+	vasym_ax.set_ylabel('V$_{asym}$')
+
+	A0_ax_2.set_ylabel('A0 : Ring systemic velocity')
+	K2A0_ax.set_ylabel('K2/A0 : m = 2 amplitude')
+
+	A0_ax_2.set_xlabel('Radius [kpc]')
+	K2A0_ax.set_xlabel('Radius [kpc]')
+
+	PA_ax_2.set_ylim([80,100])
+	# q_ax_2.set_ylim(0.9,1.1)
+	A0_ax_1.set_ylim([0,np.max(A0_1)*1.1])
+	K1A0_ax.set_ylim([0,1])
+	K2A0_ax.set_ylim([0,0.3])
+
+
+	PA_ax_1.set_ylim([80,100])
+	# q_ax_1.set_ylim(0.9,1.1)
+	K1_ax.set_ylim([0,300])
+	vasym_ax.set_ylim([0,0.1])
+	A0_ax_2.set_ylim([-40,40])
+
+	
+
+	if save != None:
+		fig.savefig(save,dpi=200)
+	else:
+		plt.show()
 
 
 ### examples ###
@@ -1038,6 +1264,7 @@ def hi_spectra(mom0, mom1):
 if __name__ == '__main__':
 
 	# main()
-	test_centre_fitting()
+	# test_centre_fitting()
+	HI_vel_asym_example()
 
 
